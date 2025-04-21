@@ -1,18 +1,23 @@
 import json
 import logging
 import os
+from re import I
 import sys
 from time import sleep
 import requests
 import discord
 from discord.ext import commands
-from dotenv import get_variables
+from dotenv.main import load_dotenv
 from cogs.utils.dict_icons import ICONS
+from cogs.utils.utils import get_env_variable
 
-bot_details = get_variables('.env')
-if not bot_details['DISCORD_TOKEN']:
+# Load environment variables from .env file
+load_dotenv()
+# Check if the .env file exists
+if get_env_variable('DISCORD_TOKEN') is None:
     sys.exit("'DISCORD_TOKEN' not found! Please add it and try again.")
-DISCORD_TOKEN = bot_details['DISCORD_TOKEN']
+
+DISCORD_TOKEN =  get_env_variable("DISCORD_TOKEN")
 intents = discord.Intents.default()
 # icons link: https://emojicombos.com/
 icons = ICONS()
