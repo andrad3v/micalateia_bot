@@ -1,23 +1,20 @@
 import json
-import logging
 import os
-from re import I
 import sys
-from time import sleep
+from tkinter import NO
 import requests
 import discord
+import logging
+from time import sleep
 from discord.ext import commands
-from dotenv.main import load_dotenv
+from cogs.starter import initialize
+from cogs.api_callers import call_api
 from cogs.utils.dict_icons import ICONS
-from cogs.utils.utils import get_env_variable
+from cogs.system.logger import LoggingFormatter
+from cogs.system.progress_bar import ProgressBar
+from cogs.utils.apis.api_mangadex import get_last_chapters
 
-# Load environment variables from .env file
-load_dotenv()
-# Check if the .env file exists
-if get_env_variable('DISCORD_TOKEN') is None:
-    sys.exit("'DISCORD_TOKEN' not found! Please add it and try again.")
 
-DISCORD_TOKEN =  get_env_variable("DISCORD_TOKEN")
 intents = discord.Intents.default()
 # icons link: https://emojicombos.com/
 icons = ICONS()
@@ -27,7 +24,6 @@ ov_club_icon = 'https://w74.overgeared.club/wp-content/uploads/2021/04/logo2-300
 
 intents.message_content = True
 
-
 # Check if the config file exists
 
 if not os.path.isfile(f"{os.path.realpath(os.path.dirname(__file__))}/config.json"):
@@ -35,21 +31,6 @@ if not os.path.isfile(f"{os.path.realpath(os.path.dirname(__file__))}/config.jso
 else:
     with open(f"{os.path.realpath(os.path.dirname(__file__))}/config.json") as file:
         config = json.load(file)
-class ProgressBar:
-    def __init__(self, length: int = 20, fill: str = "█", empty: str = "░") -> None:
-        self.length = length
-        self.fill = fill
-        self.empty = empty
-
-    def progress(self, value: int, total: int) -> str:
-        progress = int(self.length * value / total)
-        return f"{self.fill * progress}{self.empty * (self.length - progress)}"
-
-    def __str__(self) -> str:
-        return f"{self.fill * self.length}"
-
-    def __repr__(self) -> str:
-        return f"{self.fill * self.length}"
 
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', print_end="\r"):
         """
@@ -72,46 +53,8 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
         if iteration == total:
             print()
 
-    # # Example usage
-    # total_items = 100
-    # for i in range(total_items):
-    #     sleep(0.1)  # Simulate work being done
-    #     print_progress_bar(i + 1, total_items, prefix='Progress:', suffix='Complete', length=50)
-
-class LoggingFormatter(logging.Formatter):
-    # Colors
-    black = "\x1b[30m"
-    red = "\x1b[31m"
-    green = "\x1b[32m"
-    yellow = "\x1b[33m"
-    blue = "\x1b[34m"
-    gray = "\x1b[38m"
-    # Styles
-    reset = "\x1b[0m"
-    bold = "\x1b[1m"
-
-    COLORS = {
-        logging.DEBUG: gray + bold,
-        logging.INFO: blue + bold,
-        logging.WARNING: yellow + bold,
-        logging.ERROR: red,
-        logging.CRITICAL: red + bold,
-    }
-
-    def format(self, record):
-        log_color = self.COLORS[record.levelno]
-        format = "(black){asctime}(reset) (levelcolor){levelname:<8}(reset) (green){name}(reset) {message}"
-        format = format.replace("(black)", self.black + self.bold)
-        format = format.replace("(reset)", self.reset)
-        format = format.replace("(levelcolor)", log_color)
-        format = format.replace("(green)", self.green + self.bold)
-        formatter = logging.Formatter(format, "%Y-%m-%d %H:%M:%S", style="{")
-        return formatter.format(record)
-
-
-logger = logging.getLogger("Micalateia")
+logger = logging.getLogger("MiK:main")
 logger.setLevel(logging.DEBUG)
-
 # Console handler
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(LoggingFormatter())
@@ -121,12 +64,13 @@ file_handler_formatter = logging.Formatter(
     "[{asctime}] [{levelname:<8}] {name}: {message}", "%Y-%m-%d %H:%M:%S", style="{"
 )
 file_handler.setFormatter(file_handler_formatter)
-
 # Add the handlers
 logger.addHandler(console_handler)
 logger.addHandler(file_handler)
+
 # Progress bar
 Pbar = ProgressBar()
+
 class DiscordBot(commands.Bot):
     def __init__(self) -> None:
         super().__init__(
@@ -171,13 +115,117 @@ class DiscordBot(commands.Bot):
 
             for i in range(100):
                 # Progress bar
-                print_progress_bar(i+1, 100, prefix='Progress:', suffix='Complete', length=100)
+                # print_progress_bar(i+1, 100, prefix='Progress:', suffix='Complete', length=100)
                 deleted = await message.channel.purge(limit=5, check=lambda m: m.author.bot)
                 count += len(deleted)
                 sleep(3)
             await message.channel.send(f'Deleted {count} Bot`s messages.', delete_after=5)
             logger.info(f'Deleted {count} Bot`s messages.')
             return
+
+        elif message.content == '!hp':
+            logger.info('Help command requested!')
+            await message.delete(delay=5)
+            embed = discord.Embed(
+                title='Micalateia Help',
+                description='Here is the help for Micalateia',
+                color=discord.Color.blue()
+            )
+            embed.set_thumbnail(url=ov_club_icon)
+            embed.add_field(name='!ovlast', value='Get the latest chapter of Overgeared', inline=False)
+            embed.add_field(name='!ovall', value='Get all chapters of Overgeared', inline=False)
+            embed.add_field(name='!s [manga_name] [pt-br/en]', value='Get the last 5 chapter of manga you want in the language selected by default return in pt-br', inline=False)
+            embed.set_footer(text='Warning: this message will be deleted in 2min', icon_url=icons.get_icons('warning'))
+            embed.set_author(name="Cereal_3D", icon_url=ov_author_icon)
+            await message.channel.send(embed=embed, delete_after=120)
+            logger.info('Help sent!')
+
+        elif message.content == '!ping':
+            logger.info('Ping command requested!')
+            await message.delete(delay=5)
+            embed = discord.Embed(
+                title='Pong!',
+                description='Micalateia is online!',
+                color=discord.Color.green()
+            )
+            logger.info('Ping sent!')
+
+        elif message.content.startswith('!ms'):
+            logger.info('Manga Search command requested!')
+            await message.delete(delay=5)
+            embed = discord.Embed(
+                title='Micalateia Manga Search',
+                description='This is a test for the manga search command',
+                color=discord.Color.blue()
+            )
+
+            title = message.content.split('!ms ')[1] if len(message.content.split(' ')) > 1 else 'Overgeared'
+
+            chapters = call_api("mangadex", "search", [title])
+            logger.debug(chapters)
+
+            if chapters is None or len(chapters) == 0:
+                await message.channel.send(f"No chapters found for {title}.", delete_after=5)
+                return
+
+            embed.add_field(name='Manga:', value=title, inline=True)
+            embed.set_thumbnail(url=ov_club_icon)
+            embed.set_footer(text='Warning: this message will be deleted in 2min', icon_url=icons.get_icons('warning'))
+            embed.set_author(name="Cereal_3D", icon_url=ov_author_icon)
+
+            await message.channel.send(embed=embed, delete_after=120)
+
+            logger.info('Manga Search sent!')
+
+        elif message.content.startswith('!s'):
+            logger.info('Search command requested!')
+            args = message.content.split("!s ")
+
+            await message.delete(delay=5)
+
+            if len(args) < 2:
+                await message.channel.send("Please provide a manga name.", delete_after=5)
+                return
+
+            manga_name = args[1]
+            language = args[2] if len(args) > 2 else 'pt-br'
+
+            logger.info(f'Searching for manga: {manga_name} in {language}')
+
+            chapters = call_api("mangadex", "list_chapters", [manga_name, language])
+
+
+            if chapters is not None and len(chapters) > 0:
+                embed = discord.Embed(
+                    title='Manga Search Result:',
+                    description=f"Here are the last 5 chapters of {manga_name}",
+                    color=discord.Color.blue()
+                )
+                embed.set_thumbnail(url=chapters[0])
+                embed.set_footer(text='Warning: this message will be deleted in 2min', icon_url=icons.get_icons('warning'))
+                embed.set_author(name="Micalateia", icon_url=ov_author_icon)
+
+                chapters_data = get_last_chapters(args[1], language)[1]
+
+                # logger.debug(chapters_data)
+                if chapters_data is None or len(chapters_data) == 0:
+                    await message.channel.send(f"No chapters found for {args[0]}.", delete_after=5)
+                    return
+
+                for chapter in chapters_data:
+                    title = chapter['title'] if len(chapter['title']) > 0 else 'No title available'
+
+                    embed.add_field(
+                        name=f"Chapter {chapter['chapter']}:",
+                        value=f"[{ title }]({chapter['chapter_url']})",
+                        inline=False
+                    )
+
+                await message.channel.send(embed=embed, delete_after=120)
+                logger.info('Search result sent!')
+            else:
+                await message.channel.send("Manga not found.", delete_after=5)
+                logger.warning(f"Manga '{manga_name}' not found.")
 
         elif message.content == '!clean':
             logger.info('Clean command requested! Start cleaning...')
@@ -190,7 +238,7 @@ class DiscordBot(commands.Bot):
 
                 for i in range(100):
                     # Progress bar
-                    print_progress_bar(i+1, 100, prefix='Progress:', suffix='Complete', length=100)
+                    # print_progress_bar(i+1, 100, prefix='Progress:', suffix='Complete', length=100)
                     deleted = await self.get_channel(target_channel).purge(limit=5)
 
                     if deleted == []:
@@ -207,7 +255,7 @@ class DiscordBot(commands.Bot):
         # Ignore messages sent by the bot itself
         if message.author.bot:
             return
-        elif channel_receive != channel_test\
+        elif channel_receive != channel_test.name\
             and channel_receive != channel_mangazin.name\
                 and message.content.startswith('!'):
 
@@ -292,4 +340,4 @@ class DiscordBot(commands.Bot):
                 await message.channel.send("No chapters found.", delete_after=5)
 
 bot = DiscordBot()
-bot.run(DISCORD_TOKEN)
+bot.run(initialize())
